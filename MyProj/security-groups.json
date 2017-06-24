@@ -1,0 +1,156 @@
+{
+  "Description": "This template contains the security groups required by our entire stack. We create them in a seperate nested template, so they can be referenced by all of the other nested templates.\n",
+  "Parameters": {
+    "ProductName": {
+      "Description": "The Product Name, that we tag with every resource , so that we can track resources for products",
+      "Type": "String"
+    },
+    "EnvironmentName": {
+      "Description": "An environment name that will be prefixed to resource names, also every resource we tag with env",
+      "Type": "String"
+    },
+    "VPC": {
+      "Type": "AWS::EC2::VPC::Id",
+      "Description": "Choose which VPC the security groups should be deployed to"
+    }
+  },
+  "Resources": {
+    "ECSHostSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "Access to the ECS hosts and the tasks/containers that run on them",
+        "SecurityGroupIngress": [
+          {
+            "SourceSecurityGroupId": {
+              "Ref": "LoadBalancerSecurityGroup"
+            },
+            "IpProtocol": -1
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProductName}.${EnvironmentName}.ECS-Hosts-SecurityGroup"
+            }
+          },
+          {
+            "Key": "ProductName",
+            "Value": {
+              "Ref": "ProductName"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    },
+    "LoadBalancerSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "Access to the load balancer that sits in front of ECS",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "IpProtocol": -1
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProductName}.${EnvironmentName}.LoadBalancers-SecurityGroup"
+            }
+          },
+          {
+            "Key": "ProductName",
+            "Value": {
+              "Ref": "ProductName"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    },
+    "ForwarderLambdaSecurityGroup": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "VpcId": {
+          "Ref": "VPC"
+        },
+        "GroupDescription": "Access to the load balancer that sits in front of ECS",
+        "SecurityGroupIngress": [
+          {
+            "CidrIp": "0.0.0.0/0",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "IpProtocol": -1
+          }
+        ],
+        "SecurityGroupEgress": [
+          {
+            "IpProtocol": "-1",
+            "FromPort": "-1",
+            "ToPort": "-1",
+            "CidrIp": "0.0.0.0/0"
+          }
+        ],
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": {
+              "Fn::Sub": "${ProductName}.${EnvironmentName}.Lambda-SecurityGroup"
+            }
+          },
+          {
+            "Key": "ProductName",
+            "Value": {
+              "Ref": "ProductName"
+            }
+          },
+          {
+            "Key": "Environment",
+            "Value": {
+              "Ref": "EnvironmentName"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "ECSHostSecurityGroup": {
+      "Description": "A reference to the security group for ECS hosts",
+      "Value": {
+        "Ref": "ECSHostSecurityGroup"
+      }
+    },
+    "LoadBalancerSecurityGroup": {
+      "Description": "A reference to the security group for load balancers",
+      "Value": {
+        "Ref": "LoadBalancerSecurityGroup"
+      }
+    },
+    "ForwarderLambdaSecurityGroup": {
+      "Description": "A reference to the security group for lambda forwarder",
+      "Value": {
+        "Ref": "ForwarderLambdaSecurityGroup"
+      }
+    }
+  }
+}

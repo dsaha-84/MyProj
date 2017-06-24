@@ -1,0 +1,248 @@
+{
+    "Description": "\nThis template deploys a VPC, with a pair of public and private subnets spread across two Availabilty Zones. It deploys an Internet Gateway, with a default route on the public subnets. It deploys a pair of NAT Gateways (one in each AZ), and default routes for them in the private subnets.\nIt then deploys a highly available ECS cluster using an AutoScaling Group, with ECS hosts distributed across multiple Availability Zones.\nFinally, it deploys a pair of example ECS services from containers published in Amazon EC2 Container Registry (Amazon ECR).\n", 
+    "Parameters": {
+        "ProductName": {
+            "Description": "The Product Name, that we tag with every resource , so that we can track resources for products", 
+            "Type": "String"
+        }, 
+        "EnvironmentName": {
+            "Description": "An environment name that will be prefixed to resource names, also every resource we tag with env", 
+            "Type": "String"
+        }, 
+        "OpsBucketName": {
+            "Description": "The S3 Bucket Name for Operation Scripts", 
+            "Type": "String"
+        }
+    }, 
+    "Resources": {
+        "VPC": {
+            "Type": "AWS::CloudFormation::Stack", 
+            "Properties": {
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${OpsBucketName}/infrastructure/vpc.json"
+                }, 
+                "Parameters": {
+                    "EnvironmentName": {
+                        "Ref": "EnvironmentName"
+                    }, 
+                    "ProductName": {
+                        "Ref": "ProductName"
+                    }, 
+                    "VpcCIDR": "10.0.0.0/21", 
+                    "PublicSubnet1CIDR": "10.0.1.0/24", 
+                    "PublicSubnet2CIDR": "10.0.2.0/24", 
+                    "PrivateSubnet1CIDR": "10.0.3.0/24", 
+                    "PrivateSubnet2CIDR": "10.0.4.0/24"
+                }
+            }
+        }, 
+        "SecurityGroups": {
+            "Type": "AWS::CloudFormation::Stack", 
+            "Properties": {
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${OpsBucketName}/infrastructure/security-groups.json"
+                }, 
+                "Parameters": {
+                    "EnvironmentName": {
+                        "Ref": "EnvironmentName"
+                    }, 
+                    "ProductName": {
+                        "Ref": "ProductName"
+                    }, 
+                    "VPC": {
+                        "Fn::GetAtt": "VPC.Outputs.VPC"
+                    }
+                }
+            }
+        }, 
+        "Jumpbox": {
+            "Type": "AWS::CloudFormation::Stack", 
+            "Properties": {
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${OpsBucketName}/infrastructure/jumpbox.json"
+                }, 
+                "Parameters": {
+                    "EnvironmentName": {
+                        "Ref": "EnvironmentName"
+                    }, 
+                    "ProductName": {
+                        "Ref": "ProductName"
+                    }, 
+                    "VpcId": {
+                        "Fn::GetAtt": "VPC.Outputs.VPC"
+                    }, 
+                    "SubnetId": {
+                        "Fn::GetAtt": "VPC.Outputs.PublicSubnet1"
+                    }, 
+                    "KeyName": "MyKey",
+                    "WhitelistIP": "0.0.0.0/0"
+                }
+            }
+        }, 
+        "ALB": {
+            "Type": "AWS::CloudFormation::Stack", 
+            "Properties": {
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${OpsBucketName}/infrastructure/load-balancers-public.json"
+                }, 
+                "Parameters": {
+                    "EnvironmentName": {
+                        "Ref": "EnvironmentName"
+                    }, 
+                    "ProductName": {
+                        "Ref": "ProductName"
+                    }, 
+                    "VPC": {
+                        "Fn::GetAtt": "VPC.Outputs.VPC"
+                    }, 
+                    "Subnets": {
+                        "Fn::GetAtt": "VPC.Outputs.PublicSubnets"
+                    }, 
+                    "SecurityGroup": {
+                        "Fn::GetAtt": "SecurityGroups.Outputs.LoadBalancerSecurityGroup"
+                    }
+                }
+            }
+        }, 
+        "ECS": {
+            "Type": "AWS::CloudFormation::Stack", 
+            "Properties": {
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${OpsBucketName}/infrastructure/ecs-cluster.json"
+                }, 
+                "Parameters": {
+                    "EnvironmentName": {
+                        "Ref": "EnvironmentName"
+                    }, 
+                    "ProductName": {
+                        "Ref": "ProductName"
+                    }, 
+                    "VPC": {
+                        "Fn::GetAtt": "VPC.Outputs.VPC"
+                    }, 
+                    "Subnets": {
+                        "Fn::GetAtt": "VPC.Outputs.PrivateSubnets"
+                    }, 
+                    "InstanceType": "t2.small",
+                    "ClusterSize": 1,
+                    "SecurityGroup": {
+                        "Fn::GetAtt": "SecurityGroups.Outputs.ECSHostSecurityGroup"
+                    }, 
+                    "AddEfs": true,
+                    "KeyName": "MyKey",
+                    "FileSystem":
+                    {
+                        "Fn::GetAtt":"EFS.Outputs.FileSystemID"
+                    }
+                }
+            }
+        },
+        "EFS": {
+            "Type": "AWS::CloudFormation::Stack",
+            "Properties": {
+                "TemplateURL": {
+                    "Fn::Sub": "https://s3.amazonaws.com/${OpsBucketName}/infrastructure/efs.json"
+                },
+                "Parameters": {
+                    "EnvironmentName": {
+                        "Ref": "EnvironmentName"
+                    },
+                    "ProductName": {
+                        "Ref": "ProductName"
+                    },
+                    "VPC": {
+                        "Fn::GetAtt": "VPC.Outputs.VPC"
+                    },
+                    "VpcCIDR": "10.0.0.0/21",
+                    "EFSNameTag":"ISCSI",
+                    "PrivateSubnet1" :{
+                        "Fn::GetAtt": "VPC.Outputs.PrivateSubnet1"
+                    },
+                    "PrivateSubnet2" :{
+                        "Fn::GetAtt": "VPC.Outputs.PrivateSubnet2"
+                    }
+
+                }
+            }
+        }
+    }, 
+    "Outputs": {
+        "VPCID": {
+            "Description": "The VPC endpoint", 
+            "Value": {
+                "Fn::GetAtt": "VPC.Outputs.VPC"
+            }, 
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-vpc"
+                }
+            }
+        },
+        "PrivateSubnets": {
+            "Description": "The VPC endpoint",
+            "Value": {
+                "Fn::GetAtt": "VPC.Outputs.PrivateSubnets"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-PrivateSubnets"
+                }
+            }
+        },
+        "PublicSubnets": {
+            "Description": "The VPC endpoint",
+            "Value": {
+                "Fn::GetAtt": "VPC.Outputs.PublicSubnets"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-PublicSubnets"
+                }
+            }
+        },
+        "Cluster": {
+            "Description": "A reference to the ECS cluster", 
+            "Value": {
+                "Fn::GetAtt": "ECS.Outputs.Cluster"
+            }, 
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-cluster"
+                }
+            }
+        }, 
+        "LoadBalancerUrl": {
+            "Description": "A reference to the LoadBalancer Url", 
+            "Value": {
+                "Fn::GetAtt": "ALB.Outputs.LoadBalancerUrl"
+            }, 
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-loadbalancerurl"
+                }
+            }
+        }, 
+        "Listener": {
+            "Description": "A reference to the ALB Listener", 
+            "Value": {
+                "Fn::GetAtt": "ALB.Outputs.Listener"
+            }, 
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-listener"
+                }
+            }
+        }, 
+        "LambdaSecurityGroup": {
+            "Description": "The Lambda SG",
+            "Value": {
+                "Fn::GetAtt": "SecurityGroups.Outputs.ForwarderLambdaSecurityGroup"
+            },
+            "Export": {
+                "Name": {
+                    "Fn::Sub": "${AWS::StackName}-LambdaSecurityGroup"
+                }
+            }
+        }
+    }
+}
